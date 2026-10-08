@@ -1,0 +1,21 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# phpBB
+/cache/
+/files/
+/store/
+
+# Composer
+vendor/
+composer.lock
+
+# OS
+Thumbs.db
+.DS_Store
+*.log

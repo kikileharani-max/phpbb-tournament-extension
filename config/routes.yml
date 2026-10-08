@@ -1,0 +1,14 @@
+# Tournament Routes Configuration
+
+kikileharani_tournament_index:
+    path: /tournament
+    defaults: { _controller: 'kikileharani.tournament.controller:index' }
+
+kikileharani_tournament_leaderboard:
+    path: /tournament/leaderboard
+    defaults: { _controller: 'kikileharani.tournament.controller:leaderboard' }
+
+kikileharani_tournament_stats:
+    path: /tournament/user/{user_id}
+    defaults: { _controller: 'kikileharani.tournament.controller:user_stats' }
+    requirements: { user_id: '\d+' }
