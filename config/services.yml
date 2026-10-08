@@ -4,24 +4,16 @@ services:
     arguments:
       - '@dbal.conn'
       - '@user'
+      - '@config'
     tags:
       - { name: event.listener }
 
   kikileharani.tournament.controller:
     class: kikileharani\tournament\controller\tournament_controller
     arguments:
+      - '@controller.helper'
       - '@template'
       - '@user'
       - '@auth'
       - '@dbal.conn'
-      - '@language'
-
-  kikileharani.tournament.acp.controller:
-    class: kikileharani\tournament\controller\acp_tournament_controller
-    arguments:
-      - '@template'
-      - '@user'
-      - '@auth'
-      - '@dbal.conn'
-      - '@request'
-      - '@log'
+      - '@config'

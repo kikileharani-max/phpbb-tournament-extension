@@ -1,13 +1,14 @@
 {
   "name": "kikileharani/tournament",
   "type": "phpbb-extension",
-  "description": "Tournament extension compatible with Relax Arcade 1.0.28 for phpBB 3.3.5",
-  "version": "1.0.0",
+  "description": "Tournament extension compatible with phpBB 3.3.5 and Relax Arcade 1.0.28",
+  "version": "1.0.1",
   "time": "2026-10-08",
   "license": "GPL-2.0-only",
   "authors": [
     {
       "name": "kikileharani-max",
+      "email": "kiki.leharani@gmail.com",
       "role": "Developer"
     }
   ],

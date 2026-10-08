@@ -1,52 +1,50 @@
 <?php
 /**
- * Tournament Controller - Frontend
+ * Tournament controller
  */
 
 namespace kikileharani\tournament\controller;
 
+use phpbb\controller\helper;
+use phpbb\template\template;
+use phpbb\user;
+use phpbb\auth\auth;
+use phpbb\db\driver\driver_interface;
+use phpbb\config\config;
+
 class tournament_controller
 {
+    protected $helper;
     protected $template;
     protected $user;
     protected $auth;
     protected $db;
-    protected $language;
-    protected $tables;
+    protected $config;
 
-    public function __construct(
-        \phpbb\template\template $template,
-        \phpbb\user $user,
-        \phpbb\auth\auth $auth,
-        \phpbb\db\driver\driver_interface $db,
-        \phpbb\language\language $language
-    ) {
+    public function __construct(helper $helper, template $template, user $user, auth $auth, driver_interface $db, config $config)
+    {
+        $this->helper = $helper;
         $this->template = $template;
         $this->user = $user;
         $this->auth = $auth;
         $this->db = $db;
-        $this->language = $language;
-        $this->tables = [
-            'tournament' => 'phpbb_tournament',
-            'tournament_participants' => 'phpbb_tournament_participants',
-            'tournament_scores' => 'phpbb_tournament_scores',
-        ];
+        $this->config = $config;
     }
 
-    /**
-     * Main tournament page
-     */
     public function index()
     {
         if (!$this->auth->acl_get('u_tournament_view')) {
             trigger_error('NO_AUTH_TOURNAMENT');
         }
 
-        // Get active tournament
-        $sql = 'SELECT * FROM ' . $this->tables['tournament'] . '
-                WHERE status = "active"
-                LIMIT 1';
-        
+        $table_prefix = $this->config['table_prefix'];
+        $tournament_table = $table_prefix . 'tournament';
+
+        if (!$this->db->sql_table_exists($tournament_table)) {
+            return $this->helper->message('The Tournament extension is not installed yet.', [], 'ERROR');
+        }
+
+        $sql = 'SELECT * FROM ' . $tournament_table . ' WHERE status = "active" ORDER BY tournament_id DESC LIMIT 1';
         $result = $this->db->sql_query($sql);
         $tournament = $this->db->sql_fetchrow($result);
         $this->db->sql_freeresult($result);
@@ -54,20 +52,22 @@ class tournament_controller
         if (!$tournament) {
             $this->template->assign_vars([
                 'NO_TOURNAMENT' => true,
-                'MESSAGE' => 'No active tournament at the moment.',
+                'TOURNAMENT_MESSAGE' => $this->user->lang('TOURNAMENT_NO_ACTIVE'),
             ]);
-            return new \Symfony\Component\HttpFoundation\Response($this->template->parse('tournament_index.html'), 200);
+
+            return $this->helper->render('tournament_index.html', $this->user->lang('TOURNAMENT_TITLE'));
         }
 
-        // Get top scores
+        $score_table = $table_prefix . 'tournament_scores';
+        $users_table = $table_prefix . 'users';
+
         $sql = 'SELECT ts.score, ts.user_id, u.username, u.user_colour
-                FROM ' . $this->tables['tournament_scores'] . ' ts
-                JOIN ' . USERS_TABLE . ' u ON ts.user_id = u.user_id
-                WHERE ts.tournament_id = ' . (int)$tournament['tournament_id'] . '
-                GROUP BY ts.user_id
-                ORDER BY ts.score DESC
+                FROM ' . $score_table . ' ts
+                LEFT JOIN ' . $users_table . ' u ON (u.user_id = ts.user_id)
+                WHERE ts.tournament_id = ' . (int) $tournament['tournament_id'] . '
+                ORDER BY ts.score DESC, ts.score_date ASC
                 LIMIT 20';
-        
+
         $result = $this->db->sql_query($sql);
         $leaderboard = [];
         $rank = 1;
@@ -78,7 +78,7 @@ class tournament_controller
         $this->db->sql_freeresult($result);
 
         $this->template->assign_vars([
-            'TOURNAMENT_ID' => $tournament['tournament_id'],
+            'TOURNAMENT_ID' => (int) $tournament['tournament_id'],
             'TOURNAMENT_NAME' => $tournament['tournament_name'],
             'TOURNAMENT_STATUS' => $tournament['status'],
             'TOURNAMENT_START' => $this->user->format_date($tournament['start_date']),
@@ -86,61 +86,39 @@ class tournament_controller
             'LEADERBOARD' => $leaderboard,
         ]);
 
-        return new \Symfony\Component\HttpFoundation\Response($this->template->parse('tournament_index.html'), 200);
+        return $this->helper->render('tournament_index.html', $this->user->lang('TOURNAMENT_TITLE'));
     }
 
-    /**
-     * Detailed leaderboard
-     */
     public function leaderboard()
     {
         if (!$this->auth->acl_get('u_tournament_view')) {
             trigger_error('NO_AUTH_TOURNAMENT');
         }
 
-        $sql = 'SELECT SUM(score) as total_score, user_id, username, user_colour
-                FROM ' . $this->tables['tournament_scores'] . ' ts
-                JOIN ' . USERS_TABLE . ' u ON ts.user_id = u.user_id
-                GROUP BY ts.user_id
+        $table_prefix = $this->config['table_prefix'];
+        $score_table = $table_prefix . 'tournament_scores';
+        $users_table = $table_prefix . 'users';
+
+        $sql = 'SELECT ts.user_id, u.username, u.user_colour, SUM(ts.score) AS total_score
+                FROM ' . $score_table . ' ts
+                LEFT JOIN ' . $users_table . ' u ON (u.user_id = ts.user_id)
+                GROUP BY ts.user_id, u.username, u.user_colour
                 ORDER BY total_score DESC
                 LIMIT 100';
-        
+
         $result = $this->db->sql_query($sql);
-        $leaderboard = [];
+        $rows = [];
         $rank = 1;
         while ($row = $this->db->sql_fetchrow($result)) {
             $row['rank'] = $rank++;
-            $leaderboard[] = $row;
+            $rows[] = $row;
         }
         $this->db->sql_freeresult($result);
 
         $this->template->assign_vars([
-            'FULL_LEADERBOARD' => $leaderboard,
+            'FULL_LEADERBOARD' => $rows,
         ]);
 
-        return new \Symfony\Component\HttpFoundation\Response($this->template->parse('tournament_leaderboard.html'), 200);
-    }
-
-    /**
-     * User profile tournament stats
-     */
-    public function user_stats($user_id)
-    {
-        $user_id = (int)$user_id;
-
-        $sql = 'SELECT ts.score, g.game_name, ts.score_date
-                FROM ' . $this->tables['tournament_scores'] . ' ts
-                JOIN phpbb_arcade_games g ON ts.game_id = g.game_id
-                WHERE ts.user_id = ' . $user_id . '
-                ORDER BY ts.score DESC';
-        
-        $result = $this->db->sql_query($sql);
-        $user_scores = [];
-        while ($row = $this->db->sql_fetchrow($result)) {
-            $user_scores[] = $row;
-        }
-        $this->db->sql_freeresult($result);
-
-        return $user_scores;
+        return $this->helper->render('tournament_leaderboard.html', $this->user->lang('TOURNAMENT_LEADERBOARD'));
     }
 }
